@@ -1,0 +1,76 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  createdAt DateTime @default(now())
+  sessions  Session[]
+}
+
+model Session {
+  id           String     @id @default(cuid())
+  createdAt    DateTime   @default(now())
+  jd           String
+  style        String
+  difficulty   String
+  numQuestions Int
+  userId       String?
+  user         User?      @relation(fields: [userId], references: [id])
+  questions    Question[]
+  answers      Answer[]
+}
+
+model Question {
+  id           String   @id @default(cuid())
+  text         String
+  type         String
+  category     String
+  options      String[]
+  correctIndex Int?
+  sessionId    String
+  session      Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  answers      Answer[]
+}
+
+model Answer {
+  id           String     @id @default(cuid())
+  text         String?
+  selectedIndex Int?
+  createdAt    DateTime   @default(now())
+  questionId   String
+  sessionId    String
+  question     Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  session      Session    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  evaluation   Evaluation?
+}
+
+model Evaluation {
+  id           String   @id @default(cuid())
+  correctness  Int?
+  clarity      Int?
+  conciseness  Int?
+  confidence   Int?
+  strengths    String[]
+  improvements String[]
+  followUp     String?
+  explanation  String?
+  total        Int?
+  grade        String?
+  isCorrect    Boolean?
+  answerId     String   @unique
+  answer       Answer   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+}
