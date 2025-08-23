@@ -3,11 +3,20 @@ import type { ISessionStore } from "./sessionStore";
 import type { Session as TSession, Question as TQuestion, Answer as TAnswer, Evaluation as TEvaluation } from "@/types";
 
 function toSessionShape(db: any): TSession {
+  const sessionId: string = db.id;
+  const localPrefix = `${sessionId}_`;
+
+  // Map answers keyed by local question id (e.g., "q1")
   const answersMap: Record<string, TAnswer> = {};
   for (const a of db.answers ?? []) {
-    answersMap[a.questionId] = {
+    const localQid =
+      typeof a.questionId === "string" && a.questionId.startsWith(localPrefix)
+        ? a.questionId.slice(localPrefix.length)
+        : a.questionId;
+
+    answersMap[localQid] = {
       id: a.id,
-      questionId: a.questionId,
+      questionId: localQid,
       createdAt: a.createdAt,
       text: a.text ?? undefined,
       selectedIndex: typeof a.selectedIndex === "number" ? a.selectedIndex : undefined,
@@ -30,14 +39,22 @@ function toSessionShape(db: any): TSession {
     };
   }
 
-  const questions: TQuestion[] = (db.questions ?? []).map((q: any) => ({
-    id: q.id, // we persist your readable ids (q1/m1)
-    type: q.type,
-    text: q.text,
-    category: q.category,
-    options: q.options ?? undefined,
-    correctIndex: typeof q.correctIndex === "number" ? q.correctIndex : undefined,
-  }));
+  // Strip prefix from question ids before returning
+  const questions: TQuestion[] = (db.questions ?? []).map((q: any) => {
+    const localQid =
+      typeof q.id === "string" && q.id.startsWith(localPrefix)
+        ? q.id.slice(localPrefix.length)
+        : q.id;
+
+    return {
+      id: localQid,
+      type: q.type,
+      text: q.text,
+      category: q.category,
+      options: q.options ?? undefined,
+      correctIndex: typeof q.correctIndex === "number" ? q.correctIndex : undefined,
+    };
+  });
 
   return {
     id: db.id,
@@ -53,22 +70,29 @@ function toSessionShape(db: any): TSession {
 
 export const PrismaSessionStore: ISessionStore = {
   async createSession(jd, style, difficulty, numQuestions, questions) {
-    const created = await prisma.session.create({
-      data: {
-        jd, style, difficulty, numQuestions,
-        questions: {
-          create: questions.map((q) => ({
-            id: q.id, // preserve "q1/m1" string id (Prisma allows overriding default cuid)
-            text: q.text,
-            type: q.type,
-            category: q.category,
-            options: q.options ?? [],
-            correctIndex: q.correctIndex ?? null,
-          })),
-        },
-      },
+    // Create session first to get its id
+    const s = await prisma.session.create({
+      data: { jd, style, difficulty, numQuestions },
+    });
+
+    // Insert questions with globally-unique ids = `${sessionId}_${localId}`
+    await prisma.question.createMany({
+      data: questions.map((q) => ({
+        id: `${s.id}_${q.id}`,
+        text: q.text,
+        type: q.type,
+        category: q.category,
+        options: q.options ?? [],
+        correctIndex: q.correctIndex ?? null,
+        sessionId: s.id,
+      })),
+    });
+
+    const created = await prisma.session.findUnique({
+      where: { id: s.id },
       include: { questions: true, answers: { include: { evaluation: true } } },
     });
+
     return toSessionShape(created);
   },
 
@@ -81,37 +105,49 @@ export const PrismaSessionStore: ISessionStore = {
   },
 
   async addAnswer(sessionId, questionId, answer) {
-    const existing = await prisma.answer.findFirst({ where: { sessionId, questionId }, include: { evaluation: true } });
+    const dbQuestionId = `${sessionId}_${questionId}`;
+
+    const existing = await prisma.answer.findFirst({
+      where: { sessionId, questionId: dbQuestionId },
+      include: { evaluation: true },
+    });
 
     const payload = {
       text: (answer as any).text ?? null,
-      selectedIndex: typeof (answer as any).selectedIndex === "number" ? (answer as any).selectedIndex : null,
+      selectedIndex:
+        typeof (answer as any).selectedIndex === "number"
+          ? (answer as any).selectedIndex
+          : null,
     };
 
     const saved = existing
       ? await prisma.answer.update({
           where: { id: existing.id },
-          data: { ...payload, /* invalidate old eval on edit by deleting it */ evaluation: existing.evaluation ? { delete: true } : undefined },
+          data: {
+            ...payload,
+            evaluation: existing.evaluation ? { delete: true } : undefined, // invalidate old eval
+          },
           include: { evaluation: true },
         })
       : await prisma.answer.create({
-          data: { ...payload, sessionId, questionId },
+          data: { ...payload, sessionId, questionId: dbQuestionId },
           include: { evaluation: true },
         });
 
     const out: TAnswer = {
       id: saved.id,
-      questionId: saved.questionId,
+      questionId, // expose local id back
       createdAt: saved.createdAt,
       text: saved.text ?? undefined,
       selectedIndex: saved.selectedIndex ?? undefined,
-      evaluation: undefined, // cleared on edit
+      evaluation: undefined,
     };
     return out;
   },
 
   async addEvaluation(sessionId, questionId, evaluation) {
-    const ans = await prisma.answer.findFirst({ where: { sessionId, questionId } });
+    const dbQuestionId = `${sessionId}_${questionId}`;
+    const ans = await prisma.answer.findFirst({ where: { sessionId, questionId: dbQuestionId } });
     if (!ans) return null;
 
     const saved = await prisma.evaluation.upsert({
@@ -184,7 +220,8 @@ export const PrismaSessionStore: ISessionStore = {
   },
 
   async removeAnswer(sessionId, questionId) {
-    const res = await prisma.answer.deleteMany({ where: { sessionId, questionId } });
+    const dbQuestionId = `${sessionId}_${questionId}`;
+    const res = await prisma.answer.deleteMany({ where: { sessionId, questionId: dbQuestionId } });
     return res.count > 0;
   },
 };

@@ -116,3 +116,58 @@ export const groqAdapter: LLMAdapter = {
     }
   },
 };
+
+// Lightweight JSON-eval helper using the same fetch-based Groq API path.
+export async function evaluateJSON(prompt: string): Promise<any> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    console.warn("[groq] evaluateJSON: missing GROQ_API_KEY");
+    return {};
+  }
+  const model = process.env.GROQ_EVAL_MODEL || "llama-3.1-70b-versatile";
+  const temperature = Number(process.env.GROQ_EVAL_TEMPERATURE ?? 0.2);
+
+  try {
+    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature,
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      console.warn("[groq:evaluateJSON] HTTP", resp.status, text.slice(0, 300));
+      return {};
+    }
+
+    const data = await resp.json();
+    const raw: string = data?.choices?.[0]?.message?.content ?? "{}";
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      // Fallback: try to extract the last JSON object from the string
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) {
+        try {
+          return JSON.parse(m[0]);
+        } catch {
+          return {};
+        }
+      }
+      return {};
+    }
+  } catch (err) {
+    console.error("[groq:evaluateJSON] exception", err);
+    return {};
+  }
+}
+

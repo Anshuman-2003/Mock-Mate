@@ -1,2 +1,38 @@
 @import "tailwindcss";
 
+:root {
+  --surface: 255 255 255;          /* light card */
+  --surface-2: 248 250 252;        /* light panel */
+  --border: 228 228 231;           /* light border */
+}
+
+.dark:root {
+  --surface: 20 20 23;             /* dark card */
+  --surface-2: 14 14 17;           /* dark panel */
+  --border: 39 39 42;              /* dark border */
+}
+
+/* Range input (slider) for consistent look */
+input[type="range"] {
+  --thumb: 255 255 255;
+  --track: 24 24 27;
+}
+.dark input[type="range"] {
+  --thumb: 10 10 11;
+  --track: 63 63 70;
+}
+input[type="range"] {
+  appearance: none;
+  height: 8px;
+  width: 100%;
+  border-radius: 9999px;
+  background: rgb(var(--track));
+}
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  height: 18px; width: 18px; border-radius: 9999px;
+  background: rgb(var(--thumb));
+  border: 2px solid rgba(255,255,255,.35);
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  margin-top: -5px;
+}
