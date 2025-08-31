@@ -69,10 +69,10 @@ function toSessionShape(db: any): TSession {
 }
 
 export const PrismaSessionStore: ISessionStore = {
-  async createSession(jd, style, difficulty, numQuestions, questions) {
+  async createSession(jd, style, difficulty, numQuestions, questions, userId) {
     // Create session first to get its id
     const s = await prisma.session.create({
-      data: { jd, style, difficulty, numQuestions },
+      data: { jd, style, difficulty, numQuestions, userId: userId ?? null},
     });
 
     // Insert questions with globally-unique ids = `${sessionId}_${localId}`
@@ -224,4 +224,13 @@ export const PrismaSessionStore: ISessionStore = {
     const res = await prisma.answer.deleteMany({ where: { sessionId, questionId: dbQuestionId } });
     return res.count > 0;
   },
+
+  async getUserSessions(userId) {
+  const rows = await prisma.session.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    include: { questions: true, answers: { include: { evaluation: true } } },
+  });
+  return rows.map(toSessionShape);
+},
 };

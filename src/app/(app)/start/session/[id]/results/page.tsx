@@ -57,19 +57,17 @@ function Gauge({ value, label, size = 120 }: { value: number | null; label: stri
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center">
           <div
-  className={`font-semibold ${
-    size <= 70 ? "text-[10px]" : size <= 100 ? "text-sm" : "text-lg"
-  }`}
->
-  {has ? (
-    <>
-      {v}
-      <span className={`${size <= 70 ? "text-[6px]" : "text-xs"}`}>/100</span>
-    </>
-  ) : (
-    <span className="text-zinc-400">–</span>
-  )}
-</div>
+            className={`font-semibold ${size <= 70 ? "text-[10px]" : size <= 100 ? "text-sm" : "text-lg"}`}
+          >
+            {has ? (
+              <>
+                {v}
+                <span className={`${size <= 70 ? "text-[6px]" : "text-xs"}`}>/100</span>
+              </>
+            ) : (
+              <span className="text-zinc-400">–</span>
+            )}
+          </div>
           <div className={`${size <= 70 ? "text-[8px]" : "text-[10px]"} text-zinc-400`}>{label}</div>
         </div>
       </div>
@@ -97,10 +95,13 @@ export default function SessionResults({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     (async () => {
-      const res = await fetch(`/api/session/${id}/results`);
+      const res = await fetch(`/api/session/${id}/results`, { cache: "no-store" });
       const j = await res.json();
-      if (res.ok && j.ok) setData(j.data?.session);
-      else setErr(j?.error ?? "Failed to load results");
+      if (res.ok && (j?.data?.session || j?.session)) {
+        setData(j.data?.session ?? j.session);
+      } else {
+        setErr(j?.error ?? "Failed to load results");
+      }
     })();
   }, [id]);
 
@@ -110,12 +111,35 @@ export default function SessionResults({ params }: { params: { id: string } }) {
   const answered = Object.keys(data.answers || {}).length;
   const evaled = Object.values<any>(data.answers || {}).filter((a) => a.evaluation).length;
 
-  // Compute overall
-  const totals = Object.values<any>(data.answers || {}).map((a) => a?.evaluation?.total).filter((n) => typeof n === "number");
-  const totalAvg = totals.length ? Math.round(totals.reduce((s: number, n: number) => s + n, 0) / totals.length) : null;
-  const anyEval = evaled > 0;
+  // ---------- Overall scoring (MCQ=100/0, Interview=eval.total) ----------
+  // All questions (for overall + breakdown)
+  const allQs = data.questions || [];
+  const mcqQs = allQs.filter((q: any) => q.type === "mcq");
+  const interviewQs = allQs.filter((q: any) => q.type !== "mcq");
+  const mcqTotal = mcqQs.length;
+  const interviewTotal = interviewQs.length;
 
-  // Aggregates for overall analysis
+  // Per-question score to compute overall
+  const qScores: (number | null)[] = allQs.map((q: any) => {
+    const ans = (data.answers || {})[q.id];
+    if (q.type === "mcq") {
+      if (typeof ans?.selectedIndex === "number" && typeof q.correctIndex === "number") {
+        return ans.selectedIndex === q.correctIndex ? 100 : 0;
+      }
+      return null; // unanswered MCQ
+    } else {
+      const t = ans?.evaluation?.total;
+      return typeof t === "number" ? t : null; // only evaluated interview answers count
+    }
+  });
+
+  const scored = qScores.filter((v): v is number => typeof v === "number");
+  const overallAvg = scored.length
+    ? Math.round(scored.reduce((s, n) => s + n, 0) / scored.length)
+    : null;
+  const anyEval = scored.length > 0;
+
+  // Aggregates for overall analysis (interview-only sub-scores)
   const evals = Object.values<any>(data.answers || {})
     .map((a) => a?.evaluation)
     .filter((e) => e && typeof e === "object");
@@ -123,17 +147,20 @@ export default function SessionResults({ params }: { params: { id: string } }) {
   const avg = (nums: number[]) =>
     nums.length ? Math.round(nums.reduce((s, n) => s + n, 0) / nums.length) : null;
 
-  const correctnessAvg = avg(evals.map((e: any) => (typeof e.correctness === "number" ? e.correctness : 0)).filter((n) => n > 0));
-  const clarityAvg = avg(evals.map((e: any) => (typeof e.clarity === "number" ? e.clarity : 0)).filter((n) => n > 0));
-  const concisenessAvg = avg(evals.map((e: any) => (typeof e.conciseness === "number" ? e.conciseness : 0)).filter((n) => n > 0));
-  const confidenceAvg = avg(evals.map((e: any) => (typeof e.confidence === "number" ? e.confidence : 0)).filter((n) => n > 0));
+  const correctnessAvg = avg(
+    evals.map((e: any) => (typeof e.correctness === "number" ? e.correctness : 0)).filter((n) => n > 0)
+  );
+  const clarityAvg = avg(
+    evals.map((e: any) => (typeof e.clarity === "number" ? e.clarity : 0)).filter((n) => n > 0)
+  );
+  const concisenessAvg = avg(
+    evals.map((e: any) => (typeof e.conciseness === "number" ? e.conciseness : 0)).filter((n) => n > 0)
+  );
+  const confidenceAvg = avg(
+    evals.map((e: any) => (typeof e.confidence === "number" ? e.confidence : 0)).filter((n) => n > 0)
+  );
 
-  const allQs = data.questions || [];
-  const mcqQs = allQs.filter((q: any) => q.type === "mcq");
-  const interviewQs = allQs.filter((q: any) => q.type !== "mcq");
-  const mcqTotal = mcqQs.length;
-  const interviewTotal = interviewQs.length;
-
+  // MCQ stats & interview coverage
   const mcqCorrect = mcqQs.reduce((acc: number, q: any) => {
     const a = (data.answers || {})[q.id];
     return acc + (typeof a?.selectedIndex === "number" && typeof q.correctIndex === "number" && a.selectedIndex === q.correctIndex ? 1 : 0);
@@ -151,11 +178,13 @@ export default function SessionResults({ params }: { params: { id: string } }) {
         <div>
           <h1 className="text-2xl font-bold">Session Results</h1>
           <p className="text-sm text-zinc-500 mt-1">
-            {answered} answered • {evaled} evaluated {anyEval && totalAvg !== null ? <>• Overall: <span className="font-medium text-zinc-200">{totalAvg}/100</span></> : null}
+            {answered} answered • {evaled} evaluated {anyEval && overallAvg !== null ? (
+              <>• Overall: <span className="font-medium text-zinc-200">{overallAvg}/100</span></>
+            ) : null}
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <Gauge value={pct(totalAvg)} label="Overall" size={140} />
+          <Gauge value={pct(overallAvg)} label="Overall" size={140} />
         </div>
       </header>
 
@@ -287,7 +316,7 @@ export default function SessionResults({ params }: { params: { id: string } }) {
 
                   {ev.followUp && (
                     <div className="md:col-span-3 rounded-xl border border-zinc-700/60 p-3">
-                      <div className="text-xs text-zinc-400 mb-2">Follow‑up</div>
+                      <div className="text-xs text-zinc-400 mb-2">Follow-up</div>
                       <div className="text-sm">{ev.followUp}</div>
                     </div>
                   )}
@@ -310,7 +339,7 @@ export default function SessionResults({ params }: { params: { id: string } }) {
 
           <div className="grid gap-6 md:grid-cols-3">
             <div className="flex items-center justify-center">
-              <Gauge value={pct(totalAvg)} label="Overall" size={160} />
+              <Gauge value={pct(overallAvg)} label="Overall" size={160} />
             </div>
 
             <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-6 md:gap-8">
@@ -374,6 +403,3 @@ export default function SessionResults({ params }: { params: { id: string } }) {
     </div>
   );
 }
-
-
-

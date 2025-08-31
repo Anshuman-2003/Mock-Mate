@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 //import { MemorySessionStore } from "@/lib/sessionStoreMemory.ts";
 import { Store } from "@/lib/store";
+import { auth } from "@clerk/nextjs/server";
 
 type Body =
   | { sessionId: string; questionId: string; answer: string }                    // interview
   | { sessionId: string; questionId: string; selectedIndex: number };            // MCQ
 
 export async function POST(req: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ ok: false, error: "Sign in required" }, { status: 401 });
   try {
     const body = (await req.json()) as Body;
 
@@ -14,7 +17,7 @@ export async function POST(req: NextRequest) {
     if (!("sessionId" in body) || !("questionId" in body)) {
       return NextResponse.json({ error: "sessionId and questionId are required" }, { status: 400 });
     }
-
+    
     // Figure out which payload we got (interview vs MCQ)
     const isInterview = "answer" in body && typeof body.answer === "string";
     const isMcq = "selectedIndex" in body && typeof body.selectedIndex === "number";

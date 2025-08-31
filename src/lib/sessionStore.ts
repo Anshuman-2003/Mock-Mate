@@ -2,7 +2,7 @@
 import { Session, Question, Answer, Evaluation } from "@/types";
 
 export interface ISessionStore {
-  createSession(jd: string, style: "interview" | "mcq" | "mix", difficulty: "easy" | "medium" | "hard", numQuestions: number, questions: Question[]): Promise<Session>;
+  createSession(jd: string, style: "interview" | "mcq" | "mix", difficulty: "easy" | "medium" | "hard", numQuestions: number, questions: Question[], userId?: string | null): Promise<Session>;
 
   getSession(sessionId: string): Promise<Session | null>;
 
@@ -18,4 +18,5 @@ export interface ISessionStore {
 
   removeAnswer(sessionId: string, questionId: string): Promise<boolean>;
 
+  getUserSessions(userId: string): Promise<Session[]>;
 }

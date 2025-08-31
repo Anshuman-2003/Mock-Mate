@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 //import { MemorySessionStore } from "@/lib/sessionStoreMemory.ts";
+import { auth } from "@clerk/nextjs/server";
 import { Store } from "@/lib/store";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ ok: false, error: "Sign in required" }, { status: 401 });
   try {
     const session = await Store.getSession(params.id);
 

@@ -42,6 +42,7 @@ export interface Answer {
 }
 
 export interface Session {
+  userId: string;
   id: string;
   jd: string;
   style: "interview" | "mcq" | "mix";

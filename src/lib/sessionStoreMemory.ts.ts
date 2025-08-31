@@ -5,13 +5,14 @@ import { Session, Answer, Evaluation, Question } from "@/types";
 const sessions = new Map<string, Session>();
 
 export const MemorySessionStore: ISessionStore = {
-  async createSession(jd, style, difficulty, numQuestions, questions) {
+  async createSession(jd, style, difficulty, numQuestions, questions, userId) {
     const id = crypto.randomUUID();
     const session: Session = {
       id, jd, style, difficulty, numQuestions,
       createdAt: new Date(),
       questions,
-      answers: {}
+      answers: {},
+      userId: userId ?? undefined,
     };
     sessions.set(id, session);
     return session;
@@ -77,5 +78,11 @@ async clearSessions() {
     delete session.answers[questionId];
     return true;
   },
+
+  async getUserSessions(userId) {
+  return Array.from(sessions.values())
+    .filter(s => s.userId === userId)
+    .sort((a,b) => +b.createdAt - +a.createdAt);
+},
   
 };

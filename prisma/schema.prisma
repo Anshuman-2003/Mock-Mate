@@ -16,9 +16,12 @@ datasource db {
 
 model User {
   id        String   @id @default(cuid())
+  clerkId   String   @unique        // NEW ← store Clerk's user.id
   email     String?  @unique
   createdAt DateTime @default(now())
   sessions  Session[]
+  name      String?
+  updatedAt DateTime @updatedAt
 }
 
 model Session {
@@ -32,6 +35,8 @@ model Session {
   user         User?      @relation(fields: [userId], references: [id])
   questions    Question[]
   answers      Answer[]
+
+   @@index([userId], name: "idx_session_user")    // NEW (query speed, user scoping)
 }
 
 model Question {

@@ -1,26 +1,30 @@
 // src/app/api/sessions/route.ts
 import { NextResponse } from "next/server";
-//import { MemorySessionStore } from "@/lib/sessionStoreMemory.ts";
+import { prisma } from "@/lib/prisma";
 import { Store } from "@/lib/store";
+import { auth } from "@clerk/nextjs/server";
 
-// GET → list all active sessions
+// GET → list sessions for the signed-in user only
 export async function GET() {
-  try {
-    const sessions = await Store.getAllSessions();
-    return NextResponse.json(sessions);
-  } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  const { userId: clerkId } = await auth();
+  if (!clerkId) return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
+
+  // map Clerk user -> internal Prisma user
+  const dbUser = await prisma.user.findUnique({ where: { clerkId } });
+  if (!dbUser) return NextResponse.json([], { status: 200 });
+
+  const sessions = await Store.getUserSessions(dbUser.id);
+  return NextResponse.json(sessions, { status: 200 });
 }
 
-// DELETE → clear all sessions (useful in dev/debug)
+// DELETE → clear ALL sessions for the signed-in user (dev utility)
 export async function DELETE() {
-  try {
-    const cleared = await Store.clearSessions();
-    return NextResponse.json({ message: "All sessions cleared", cleared });
-  } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  const { userId: clerkId } = await auth();
+  if (!clerkId) return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
+
+  const dbUser = await prisma.user.findUnique({ where: { clerkId } });
+  if (!dbUser) return NextResponse.json({ message: "No user doc; nothing to delete", cleared: 0 });
+
+  const res = await prisma.session.deleteMany({ where: { userId: dbUser.id } });
+  return NextResponse.json({ message: "User sessions cleared", cleared: res.count });
 }

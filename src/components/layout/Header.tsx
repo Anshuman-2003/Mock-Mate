@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 
 export default function Header() {
   const pathname = usePathname();
@@ -15,9 +16,7 @@ export default function Header() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="inline-flex items-center gap-2">
             <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-fuchsia-500 via-indigo-500 to-cyan-400 shadow-lg shadow-indigo-500/20" />
-            <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">
-              MockMate
-            </span>
+            <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">MockMate</span>
             <span className="ml-1 hidden rounded-full bg-gradient-to-r from-fuchsia-500 to-cyan-400 px-2 py-0.5 text-[10px] font-semibold text-white md:inline">
               BETA
             </span>
@@ -34,12 +33,29 @@ export default function Header() {
 
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            <Link
-              href="/signin"
-              className="hidden sm:inline-flex items-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 px-4 py-1.5 text-sm font-medium shadow-sm hover:opacity-90 transition"
-            >
-              Sign in
-            </Link>
+
+            {/* When signed OUT: show Sign in / Sign up */}
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="inline-flex items-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 px-4 py-1.5 text-sm font-medium shadow-sm hover:opacity-90 transition">
+                  Sign in
+                </button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <button className="hidden sm:inline-flex items-center rounded-full border border-zinc-300 dark:border-zinc-700 px-4 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 transition">
+                  Sign up
+                </button>
+              </SignUpButton>
+            </SignedOut>
+
+            {/* When signed IN: user menu (has Sign out built-in) */}
+            <SignedIn>
+              <UserButton
+                appearance={{
+                  elements: { userButtonAvatarBox: "h-8 w-8" },
+                }}
+              />
+            </SignedIn>
           </div>
         </div>
       </header>
